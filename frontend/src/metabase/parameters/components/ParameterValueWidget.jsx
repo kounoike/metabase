@@ -5,14 +5,6 @@ import PropTypes from "prop-types";
 import { connect } from "react-redux";
 import { t } from "ttag";
 
-import {
-  doesOperatorExist,
-  getOperatorByTypeAndName,
-  STRING,
-  NUMBER,
-  PRIMARY_KEY,
-} from "metabase/lib/schema_metadata";
-
 import PopoverWithTrigger from "metabase/components/PopoverWithTrigger";
 import Icon from "metabase/components/Icon";
 import DateSingleWidget from "./widgets/DateSingleWidget";
@@ -30,7 +22,10 @@ import {
   makeGetMergedParameterFieldValues,
 } from "metabase/selectors/metadata";
 
-import { getParameterIconName } from "metabase/meta/Parameter";
+import {
+  getParameterIconName,
+  deriveFieldOperatorFromParameter,
+} from "metabase/meta/Parameter";
 
 import S from "./ParameterWidget.css";
 
@@ -254,10 +249,9 @@ function Widget({
   parameters,
   dashboard,
 }) {
-  const { type } = parameter;
   const DateWidget = DATE_WIDGETS[parameter.type];
   const fields = getFields(metadata, parameter);
-  const fieldOperator = getFieldOperator(type);
+  const fieldOperator = deriveFieldOperatorFromParameter(parameter);
   if (DateWidget) {
     return (
       <DateWidget value={value} setValue={setValue} onClose={onPopoverClose} />
@@ -298,31 +292,6 @@ Widget.propTypes = {
   onPopoverClose: PropTypes.func.isRequired,
   onFocusChanged: PropTypes.func.isRequired,
 };
-
-function getFieldOperator(type) {
-  const [parameterType, maybeOperatorName] = type.split("/");
-  const operatorType = getOperatorType(parameterType);
-  const operatorName = doesOperatorExist(maybeOperatorName)
-    ? maybeOperatorName
-    : "=";
-
-  return getOperatorByTypeAndName(operatorType, operatorName);
-}
-
-function getOperatorType(parameterType) {
-  switch (parameterType) {
-    case "number":
-      return NUMBER;
-    case "location":
-    case "category":
-      return STRING;
-    case "id":
-      // id can technically be a FK but doesn't matter as both use default filter operators
-      return PRIMARY_KEY;
-    default:
-      return undefined;
-  }
-}
 
 function getWidgetDefinition(metadata, parameter) {
   if (DATE_WIDGETS[parameter.type]) {
