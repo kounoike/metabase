@@ -309,6 +309,8 @@
 
 (defmethod driver/supports? [:bigquery :foreign-keys] [_ _] true)
 
+(defmethod driver/supports? [:bigquery :set-timezone] [_ _] true)
+
 ;; BigQuery is always in UTC
 (defmethod driver/db-default-timezone :bigquery [_ _]
   "UTC")
