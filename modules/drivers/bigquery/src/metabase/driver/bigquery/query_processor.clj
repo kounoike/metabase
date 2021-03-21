@@ -19,6 +19,7 @@
             [metabase.models.table :as table]
             [metabase.query-processor.error-type :as error-type]
             [metabase.query-processor.store :as qp.store]
+            [metabase.query-processor.timezone :as qp.timezone]
             [metabase.util :as u]
             [metabase.util.date-2 :as u.date]
             [metabase.util.honeysql-extensions :as hx]
@@ -282,13 +283,12 @@
 (defrecord ^:private TruncForm [hsql-form unit]
   hformat/ToSql
   (to-sql [_]
-    (let [t (or (temporal-type hsql-form) :datetime)
-          f (case t
-              :date      :date_trunc
-              :time      :time_trunc
-              :datetime  :datetime_trunc
-              :timestamp :timestamp_trunc)]
-      (hformat/to-sql (hsql/call f (->temporal-type t hsql-form) (hsql/raw (name unit)))))))
+    (let [t (or (temporal-type hsql-form) :datetime)]
+      (case t
+              :date      (hformat/to-sql (hsql/call :date_trunc (->temporal-type t hsql-form) (hsql/raw (name unit))))
+              :time      (hformat/to-sql (hsql/call :time_trunc (->temporal-type t hsql-form) (hsql/raw (name unit))))
+              :datetime  (hformat/to-sql (hsql/call :datetime_trunc (->temporal-type t hsql-form) (hsql/raw (name unit))))
+              :timestamp (hformat/to-sql (hsql/call :timestamp_trunc (->temporal-type t hsql-form) (hsql/raw (name unit)) (qp.timezone/results-timezone-id)))))))
 
 (defmethod temporal-type TruncForm
   [trunc-form]
@@ -309,28 +309,36 @@
 (def ^:private valid-time-extract-units
   #{:microsecond :millisecond :second :minute :hour})
 
+(defmethod hformat/fn-handler "extract-with-timezone" [_ unit expr timezone-id]
+  (str "extract(" (name unit) " from " (hformat/to-sql expr) " at time zone " (hformat/to-sql timezone-id) ")"))
+
 (defn- extract [unit expr]
   (condp = (temporal-type expr)
     :time
     (do
       (assert (valid-time-extract-units unit)
               (tru "Cannot extract {0} from a TIME field" unit))
-      (recur unit (with-temporal-type (hsql/call :timestamp (hsql/call :datetime "1970-01-01" expr))
-                                      :timestamp)))
+      (with-temporal-type (hsql/call :extract unit expr) nil))
 
-    ;; timestamp and date both support extract()
     :date
     (do
       (assert (valid-date-extract-units unit)
               (tru "Cannot extract {0} from a DATE field" unit))
       (with-temporal-type (hsql/call :extract unit expr) nil))
 
+    :datetime
+    (do
+      (assert (or (valid-date-extract-units unit)
+                  (valid-time-extract-units unit))
+              (tru "Cannot extract {0} from a DATETIME field" unit))
+      (with-temporal-type (hsql/call :extract unit expr) nil))
+
     :timestamp
     (do
       (assert (or (valid-date-extract-units unit)
                   (valid-time-extract-units unit))
-              (tru "Cannot extract {0} from a DATETIME or TIMESTAMP" unit))
-      (with-temporal-type (hsql/call :extract unit expr) nil))
+              (tru "Cannot extract {0} from a TIMESTAMP" unit))
+      (with-temporal-type (hsql/call :extract-with-timezone unit expr (qp.timezone/results-timezone-id)) nil))
 
     ;; for datetimes or anything without a known temporal type, cast to timestamp and go from there
     (recur unit (->temporal-type :timestamp expr))))
@@ -677,9 +685,9 @@
   (to-sql [_]
     (hformat/to-sql
      (case (or t :timestamp)
-       :time      :%current_time
-       :date      :%current_date
-       :datetime  :%current_datetime
+       :time      (hsql/call :current_time (qp.timezone/results-timezone-id))
+       :date      (hsql/call :current_date (qp.timezone/results-timezone-id))
+       :datetime  (hsql/call :current_datetime (qp.timezone/results-timezone-id))
        :timestamp :%current_timestamp))))
 
 (defmethod temporal-type CurrentMomentForm
