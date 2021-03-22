@@ -288,7 +288,7 @@
               :date      (hformat/to-sql (hsql/call :date_trunc (->temporal-type t hsql-form) (hsql/raw (name unit))))
               :time      (hformat/to-sql (hsql/call :time_trunc (->temporal-type t hsql-form) (hsql/raw (name unit))))
               :datetime  (hformat/to-sql (hsql/call :datetime_trunc (->temporal-type t hsql-form) (hsql/raw (name unit))))
-              :timestamp (hformat/to-sql (hsql/call :timestamp_trunc (->temporal-type t hsql-form) (hsql/raw (name unit)) (qp.timezone/results-timezone-id)))))))
+              :timestamp (hformat/to-sql (hsql/call :timestamp_trunc (->temporal-type t hsql-form) (hsql/raw (name unit)) (hsql/raw (format "'%s'" (qp.timezone/results-timezone-id)))))))))
 
 (defmethod temporal-type TruncForm
   [trunc-form]
